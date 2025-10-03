@@ -8,6 +8,8 @@ import {
   type UseInfiniteQueryResult,
   type UseSuspenseQueryOptions,
   type UseSuspenseQueryResult,
+  type UseSuspenseInfiniteQueryOptions,
+  type UseSuspenseInfiniteQueryResult,
   type QueryClient,
   type QueryFunctionContext,
   type SkipToken,
@@ -15,6 +17,7 @@ import {
   useQuery,
   useSuspenseQuery,
   useInfiniteQuery,
+  useSuspenseInfiniteQuery,
 } from "@tanstack/react-query";
 import type {
   ClientMethod,
@@ -152,6 +155,35 @@ export type UseSuspenseQueryMethod<Paths extends Record<string, Record<HttpMetho
     : [InitWithUnknowns<Init>, Options?, QueryClient?]
 ) => UseSuspenseQueryResult<InferSelectReturnType<Response["data"], Options["select"]>, Response["error"]>;
 
+export type UseSuspenseInfiniteQueryMethod<Paths extends Record<string, Record<HttpMethod, {}>>, Media extends MediaType> = <
+  Method extends HttpMethod,
+  Path extends PathsWithMethod<Paths, Method>,
+  Init extends MaybeOptionalInit<Paths[Path], Method>,
+  Response extends Required<FetchResponse<Paths[Path][Method], Init, Media>>,
+  Options extends Omit<
+    UseSuspenseInfiniteQueryOptions<
+      Response["data"],
+      Response["error"],
+      InferSelectReturnType<InfiniteData<Response["data"]>, Options["select"]>,
+      Response["data"],
+      QueryKey<Paths, Method, Path>,
+      unknown
+    >,
+    "queryKey" | "queryFn"
+  > & {
+    pageParamName?: string;
+  },
+>(
+  method: Method,
+  url: Path,
+  init: InitWithUnknowns<Init>,
+  options: Options,
+  queryClient?: QueryClient,
+) => UseSuspenseInfiniteQueryResult<
+  InferSelectReturnType<InfiniteData<Response["data"]>, Options["select"]>,
+  Response["error"]
+>;
+
 export type UseMutationMethod<Paths extends Record<string, Record<HttpMethod, {}>>, Media extends MediaType> = <
   Method extends HttpMethod,
   Path extends PathsWithMethod<Paths, Method>,
@@ -170,6 +202,7 @@ export interface OpenapiQueryClient<Paths extends {}, Media extends MediaType = 
   useQuery: UseQueryMethod<Paths, Media>;
   useSuspenseQuery: UseSuspenseQueryMethod<Paths, Media>;
   useInfiniteQuery: UseInfiniteQueryMethod<Paths, Media>;
+  useSuspenseInfiniteQuery: UseSuspenseInfiniteQueryMethod<Paths, Media>;
   useMutation: UseMutationMethod<Paths, Media>;
 }
 
@@ -184,10 +217,11 @@ export type MethodResponse<
   ? NonNullable<FetchResponse<Paths[Path][Method], Options, Media>["data"]>
   : never;
 
-// TODO: Add the ability to bring queryClient as argument
 export default function createClient<Paths extends {}, Media extends MediaType = MediaType>(
   client: FetchClient<Paths, Media>,
+  initialQueryClient?: QueryClient,
 ): OpenapiQueryClient<Paths, Media> {
+
   const queryFn = async <Method extends HttpMethod, Path extends PathsWithMethod<Paths, Method>>({
     queryKey: [method, path, init],
     signal,
@@ -215,9 +249,15 @@ export default function createClient<Paths extends {}, Media extends MediaType =
   return {
     queryOptions,
     useQuery: (method, path, ...[init, options, queryClient]) =>
-      useQuery(queryOptions(method, path, init as InitWithUnknowns<typeof init>, options), queryClient),
+      useQuery(
+        queryOptions(method, path, init as InitWithUnknowns<typeof init>, options),
+        queryClient ?? initialQueryClient,
+      ),
     useSuspenseQuery: (method, path, ...[init, options, queryClient]) =>
-      useSuspenseQuery(queryOptions(method, path, init as InitWithUnknowns<typeof init>, options), queryClient),
+      useSuspenseQuery(
+        queryOptions(method, path, init as InitWithUnknowns<typeof init>, options),
+        queryClient ?? initialQueryClient,
+      ),
     useInfiniteQuery: (method, path, init, options, queryClient) => {
       const { pageParamName = "cursor", ...restOptions } = options;
       const { queryKey } = queryOptions(method, path, init);
@@ -247,7 +287,39 @@ export default function createClient<Paths extends {}, Media extends MediaType =
           },
           ...restOptions,
         },
-        queryClient,
+        queryClient ?? initialQueryClient,
+      );
+    },
+    useSuspenseInfiniteQuery: (method, path, init, options, queryClient) => {
+      const { pageParamName = "cursor", ...restOptions } = options;
+      const { queryKey } = queryOptions(method, path, init);
+      return useSuspenseInfiniteQuery(
+        {
+          queryKey,
+          queryFn: async ({ queryKey: [method, path, init], pageParam = 0, signal }) => {
+            const mth = method.toUpperCase() as Uppercase<typeof method>;
+            const fn = client[mth] as ClientMethod<Paths, typeof method, Media>;
+            const mergedInit = {
+              ...init,
+              signal,
+              params: {
+                ...(init?.params || {}),
+                query: {
+                  ...(init?.params as { query?: DefaultParamsOption })?.query,
+                  [pageParamName]: pageParam,
+                },
+              },
+            };
+
+            const { data, error } = await fn(path, mergedInit as any);
+            if (error) {
+              throw error;
+            }
+            return data;
+          },
+          ...restOptions,
+        },
+        queryClient ?? initialQueryClient,
       );
     },
     useMutation: (method, path, options, queryClient) =>
@@ -266,7 +338,7 @@ export default function createClient<Paths extends {}, Media extends MediaType =
           },
           ...options,
         },
-        queryClient,
+        queryClient ?? initialQueryClient,
       ),
   };
 }
