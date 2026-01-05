@@ -236,7 +236,9 @@ export default function createClient<Paths extends {}, Media extends MediaType =
     return data;
   };
 
-  const queryOptions: QueryOptionsFunction<Paths, Media> = (method, path, ...[init, options]) => ({
+  const queryOptions: QueryOptionsFunction<Paths, Media> = (method, path, ...[init, options]) => {
+    delete init?.headers
+    return {
     queryKey: (init === undefined ? ([method, path] as const) : ([method, path, init] as const)) as QueryKey<
       Paths,
       typeof method,
@@ -244,7 +246,7 @@ export default function createClient<Paths extends {}, Media extends MediaType =
     >,
     queryFn,
     ...options,
-  });
+  }};
 
   return {
     queryOptions,
