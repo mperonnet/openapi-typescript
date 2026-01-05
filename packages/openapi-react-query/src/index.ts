@@ -222,8 +222,9 @@ export default function createClient<Paths extends {}, Media extends MediaType =
   initialQueryClient?: QueryClient,
 ): OpenapiQueryClient<Paths, Media> {
 
-  const queryFn = async <Method extends HttpMethod, Path extends PathsWithMethod<Paths, Method>>({
-    queryKey: [method, path, init],
+  const queryOptions: QueryOptionsFunction<Paths, Media> = (method, path, ...[init, options]) => {
+    const queryFn = async <Method extends HttpMethod, Path extends PathsWithMethod<Paths, Method>>({
+    queryKey: [method, path],
     signal,
   }: QueryFunctionContext<QueryKey<Paths, Method, Path>>) => {
     const mth = method.toUpperCase() as Uppercase<typeof method>;
@@ -236,10 +237,10 @@ export default function createClient<Paths extends {}, Media extends MediaType =
     return data;
   };
 
-  const queryOptions: QueryOptionsFunction<Paths, Media> = (method, path, ...[init, options]) => {
-    delete init?.headers
+  
+
     return {
-    queryKey: (init === undefined ? ([method, path] as const) : ([method, path, init] as const)) as QueryKey<
+    queryKey: (init === undefined ? ([method, path] as const) : ([method, path, {params: init.params}] as const)) as QueryKey<
       Paths,
       typeof method,
       typeof path
