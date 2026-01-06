@@ -267,7 +267,7 @@ export default function createClient<Paths extends {}, Media extends MediaType =
       return useInfiniteQuery(
         {
           queryKey,
-          queryFn: async ({ queryKey: [method, path, init], pageParam = 0, signal }) => {
+          queryFn: async ({ queryKey: [method, path], pageParam = 0, signal }) => {
             const mth = method.toUpperCase() as Uppercase<typeof method>;
             const fn = client[mth] as ClientMethod<Paths, typeof method, Media>;
             const mergedInit = {
@@ -299,7 +299,7 @@ export default function createClient<Paths extends {}, Media extends MediaType =
       return useSuspenseInfiniteQuery(
         {
           queryKey,
-          queryFn: async ({ queryKey: [method, path, init], pageParam = 0, signal }) => {
+          queryFn: async ({ queryKey: [method, path], pageParam = 0, signal }) => {
             const mth = method.toUpperCase() as Uppercase<typeof method>;
             const fn = client[mth] as ClientMethod<Paths, typeof method, Media>;
             const mergedInit = {
